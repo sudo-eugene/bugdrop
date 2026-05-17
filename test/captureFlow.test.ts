@@ -43,6 +43,7 @@ async function loadCaptureFlowWithMocks(opts: {
 }
 
 afterEach(() => {
+  document.body.innerHTML = '';
   vi.doUnmock('../src/widget/screenshot-options');
   vi.doUnmock('../src/widget/picker');
   vi.doUnmock('../src/widget/area-picker');
@@ -79,7 +80,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: false });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: false,
+    });
     expect(onComplexScreenshotSkipped).toHaveBeenCalledTimes(1);
   });
 
@@ -97,14 +103,37 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: false });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: false,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 
   it('keeps selected element metadata when element capture is skipped after failure', async () => {
-    const element = document.createElement('button');
-    element.id = 'target-button';
-    document.body.appendChild(element);
+    document.body.innerHTML = `
+      <div class="injected-before-page"></div>
+      <div class="another-injected-wrapper"></div>
+      <div id="page" class="site">
+        <div id="content" class="site-content">
+          <div id="primary" class="content-area">
+            <main id="main" class="site-main">
+              <article id="post-27" class="post-27 page">
+                <div class="inside-article">
+                  <div class="entry-content">
+                    <div class="gb-container gb-container-f0cc8c05"></div>
+                    <div class="gb-container gb-container-928af62b"></div>
+                  </div>
+                </div>
+              </article>
+            </main>
+          </div>
+        </div>
+      </div>
+    `;
+    const element = document.querySelector('.gb-container-928af62b')!;
     const { runScreenshotCaptureFlow } = await loadCaptureFlowWithMocks({
       screenshotChoice: { kind: 'element' },
       pickedElement: element,
@@ -121,9 +150,13 @@ describe('capture flow state decisions', () => {
 
     expect(result).toEqual({
       screenshot: null,
-      elementSelector: '#target-button',
+      elementSelector:
+        '#post-27 > div.inside-article > div.entry-content > div.gb-container.gb-container-928af62b',
+      fullElementSelector:
+        'html > body > div#page.site > div#content.site-content > div#primary.content-area > main#main.site-main > article#post-27.post-27.page > div.inside-article > div.entry-content > div.gb-container.gb-container-928af62b:nth-of-type(2)',
       returnToForm: false,
     });
+    expect(document.querySelector(result.fullElementSelector!)).toBe(element);
     expect(onComplexScreenshotSkipped).toHaveBeenCalledTimes(1);
   });
 
@@ -140,7 +173,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: true });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: true,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 
@@ -158,7 +196,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: true });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: true,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 
@@ -177,7 +220,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: true });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: true,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 

@@ -601,6 +601,10 @@ function formatIssueBody(
     sections.push(`| **Element** | \`${payload.metadata.elementSelector}\` |`);
   }
 
+  if (payload.metadata.fullElementSelector) {
+    sections.push(`| **Full CSS path** | \`${payload.metadata.fullElementSelector}\` |`);
+  }
+
   sections.push('');
   sections.push('</details>');
   sections.push('');

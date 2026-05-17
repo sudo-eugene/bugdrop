@@ -88,6 +88,7 @@ interface FeedbackData {
   category: FeedbackCategory;
   screenshot: string | null;
   elementSelector: string | null;
+  fullElementSelector: string | null;
   name?: string;
   email?: string;
 }
@@ -821,6 +822,7 @@ async function openFeedbackFlow(
       email: formResult.email,
       screenshot: screenshotResult.screenshot,
       elementSelector: screenshotResult.elementSelector,
+      fullElementSelector: screenshotResult.fullElementSelector,
     });
     break;
   }
@@ -1157,6 +1159,7 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
           },
           timestamp: new Date().toISOString(),
           elementSelector: data.elementSelector,
+          fullElementSelector: data.fullElementSelector,
           domNodeCount,
           fullPageDisabled: isFullPageDisabled(),
           // Parsed system info

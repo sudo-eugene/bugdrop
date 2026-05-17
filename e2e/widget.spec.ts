@@ -3566,7 +3566,13 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     await host.locator('css=[data-action="skip"]').click();
     await expect(host.locator('css=.bd-success-icon')).toBeVisible({ timeout: 5000 });
     expect(payloads).toHaveLength(1);
-    expect((payloads[0].metadata as { elementSelector?: string }).elementSelector).toContain('h1');
+    const metadata = payloads[0].metadata as {
+      elementSelector?: string;
+      fullElementSelector?: string;
+    };
+    expect(metadata.elementSelector).toContain('h1');
+    expect(metadata.fullElementSelector).toContain('html > body');
+    expect(metadata.fullElementSelector).toContain('h1');
 
     await host.locator('css=.bd-close').click();
     await host.locator('css=.bd-trigger').click();

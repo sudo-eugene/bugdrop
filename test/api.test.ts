@@ -1217,6 +1217,7 @@ describe('API Routes', () => {
         metadata: {
           ...validPayload.metadata,
           elementSelector: '#submit-button',
+          fullElementSelector: 'html > body > main > form#contact > button#submit-button',
         },
       };
 
@@ -1234,6 +1235,8 @@ describe('API Routes', () => {
       expect(issueBody).toContain('http://localhost:3000');
       expect(issueBody).toContain('1920×1080');
       expect(issueBody).toContain('#submit-button');
+      expect(issueBody).toContain('Full CSS path');
+      expect(issueBody).toContain('html > body > main > form#contact > button#submit-button');
       expect(issueBody).toContain('Submitted via');
     });
 
