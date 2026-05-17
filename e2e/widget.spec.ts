@@ -2596,7 +2596,7 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
   }
 
   async function submitWithIssueResponse(page: Page, path: string, isPublic: boolean) {
-    const issueUrl = 'https://github.com/TheWebEng/ctle-theme/issues/496';
+    const issueUrl = 'https://github.com/example/project/issues/496';
 
     await page.route('**/feedback', async route => {
       await route.fulfill({
