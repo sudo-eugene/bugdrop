@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
+import { DEFAULT_ACCENT_COLOR } from '../src/defaults';
 
 type CaptureOptions = Record<string, unknown> & {
   pixelRatio?: number;
@@ -14,6 +15,13 @@ declare global {
   interface Window {
     __hostKeystrokeCount?: number;
     __captureOpts?: CaptureOptions;
+    __captureTargetInfo?: {
+      tagName: string;
+      id: string;
+      className: string;
+      width: number;
+      height: number;
+    };
   }
 }
 
@@ -2354,6 +2362,21 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     }`;
   }
 
+  function targetSpyToPng() {
+    return `function(el, opts) {
+      window.__captureOpts = opts;
+      var rect = el.getBoundingClientRect();
+      window.__captureTargetInfo = {
+        tagName: el.tagName,
+        id: el.id || '',
+        className: typeof el.className === 'string' ? el.className : '',
+        width: rect.width,
+        height: rect.height
+      };
+      return Promise.resolve('${STUB_PNG}');
+    }`;
+  }
+
   function redactionAwarePng() {
     return `function(el, opts) {
       window.__captureOpts = opts;
@@ -2581,7 +2604,7 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
       await route.fulfill({
         status: 200,
         contentType: 'image/svg+xml',
-        body: '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="44"><rect width="180" height="44" fill="#14b8a6"/><text x="16" y="28" fill="white" font-size="16">No CORS Badge</text></svg>',
+        body: `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="44"><rect width="180" height="44" fill="${DEFAULT_ACCENT_COLOR}"/><text x="16" y="28" fill="white" font-size="16">No CORS Badge</text></svg>`,
       });
     });
 
@@ -3004,6 +3027,72 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
 
     const timeoutRejections = rejections.filter(m => m.includes('timed out'));
     expect(timeoutRejections).toHaveLength(0);
+  });
+
+  test('element capture uses a surrounding context target', async ({ page }) => {
+    await mockHtmlToImage(page, targetSpyToPng());
+    await page.goto('/test/annotation-style.html?elementContextMaxArea=1.5');
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="element"]').click();
+    await expect(page.locator('#bugdrop-element-picker-tooltip')).toBeVisible({ timeout: 5000 });
+
+    const selected = page.locator('.dot.green');
+    await expect(selected).toBeVisible();
+    const selectedBox = await selected.boundingBox();
+    expect(selectedBox).toBeTruthy();
+
+    await page.mouse.click(
+      selectedBox!.x + selectedBox!.width / 2,
+      selectedBox!.y + selectedBox!.height / 2
+    );
+
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 10000 });
+
+    const targetInfo = await page.evaluate(() => window.__captureTargetInfo);
+    expect(targetInfo).toBeDefined();
+    if (!targetInfo) throw new Error('Missing capture target info');
+    expect(targetInfo.className).not.toContain('dot');
+    expect(targetInfo.width).toBeGreaterThan(selectedBox!.width * 4);
+    expect(targetInfo.height).toBeGreaterThan(selectedBox!.height * 4);
+
+    const captureOpts = await page.evaluate(() => window.__captureOpts);
+    expect(captureOpts?.pixelRatio).toBe(1);
+
+    const selectedElementNote = host.locator('css=.bd-selected-element-note');
+    await expect(selectedElementNote).toContainText('data-element-context-max-area');
+    await expect(selectedElementNote.locator('css=a')).toHaveAttribute(
+      'href',
+      'https://bugdrop.dev/docs/configuration#select-element-screenshots'
+    );
+  });
+
+  test('element context max-area setting can keep captures tightly scoped', async ({ page }) => {
+    await mockHtmlToImage(page, targetSpyToPng());
+    await page.goto('/test/annotation-style.html?elementContextMaxArea=0');
+
+    const host = await navigateToScreenshotOptions(page);
+    await host.locator('css=[data-action="element"]').click();
+    await expect(page.locator('#bugdrop-element-picker-tooltip')).toBeVisible({ timeout: 5000 });
+
+    const selected = page.locator('.dot.green');
+    await expect(selected).toBeVisible();
+    const selectedBox = await selected.boundingBox();
+    expect(selectedBox).toBeTruthy();
+
+    await page.mouse.click(
+      selectedBox!.x + selectedBox!.width / 2,
+      selectedBox!.y + selectedBox!.height / 2
+    );
+
+    await expect(host.locator('css=#annotation-canvas')).toBeVisible({ timeout: 10000 });
+
+    const targetInfo = await page.evaluate(() => window.__captureTargetInfo);
+    expect(targetInfo).toBeDefined();
+    if (!targetInfo) throw new Error('Missing capture target info');
+    expect(targetInfo.className).toContain('dot');
+    expect(targetInfo.width).toBeLessThanOrEqual(selectedBox!.width + 1);
+    expect(targetInfo.height).toBeLessThanOrEqual(selectedBox!.height + 1);
   });
 
   test('shows error modal when capture times out', async ({ page }) => {
@@ -3569,10 +3658,12 @@ test.describe('Screenshot Crash Prevention (#67)', () => {
     const metadata = payloads[0].metadata as {
       elementSelector?: string;
       fullElementSelector?: string;
+      selectedElementHighlightColor?: string;
     };
     expect(metadata.elementSelector).toContain('h1');
     expect(metadata.fullElementSelector).toContain('html > body');
     expect(metadata.fullElementSelector).toContain('h1');
+    expect(metadata.selectedElementHighlightColor).toBe(DEFAULT_ACCENT_COLOR);
 
     await host.locator('css=.bd-close').click();
     await host.locator('css=.bd-trigger').click();

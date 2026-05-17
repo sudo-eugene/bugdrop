@@ -1,4 +1,5 @@
 import { sanitizeCssColor, sanitizeNonNegativePixelValue, sanitizeShadowPreset } from './sanitize';
+import { getAccentHoverColor } from '../defaults';
 
 // src/widget/theme.ts
 
@@ -51,7 +52,7 @@ export function applyCustomStyles(
   if (accentColor) {
     const color = accentColor;
     root.style.setProperty('--bd-primary', color);
-    root.style.setProperty('--bd-primary-hover', `color-mix(in srgb, ${color} 85%, black)`);
+    root.style.setProperty('--bd-primary-hover', getAccentHoverColor(color));
     root.style.setProperty('--bd-border-focus', color);
   }
 

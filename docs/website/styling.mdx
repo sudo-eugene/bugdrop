@@ -16,6 +16,8 @@ All styling is done through data attributes on the script tag. No CSS files to i
 | `data-border-color` | Theme-dependent | Border color of the form container |
 | `data-shadow` | `"0 8px 30px rgba(0,0,0,0.12)"` | Box shadow of the form container |
 
+These same visual settings are also used by Select Element screenshots. When a user selects an element, BugDrop draws a rounded highlight box around that element using `data-color`, `data-radius`, and `data-border-width`, then mentions the exact resolved highlight color in the GitHub issue caption.
+
 ### Defaults by Theme
 
 The `data-theme` attribute sets sensible defaults for colors, which you can then override individually:

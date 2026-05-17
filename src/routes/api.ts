@@ -9,6 +9,7 @@ import {
   GitHubLabelError,
 } from '../lib/github';
 import { rateLimit, rateLimitByRepo } from '../middleware/rateLimit';
+import { resolveAccentColor } from '../defaults';
 
 const api = new Hono<{ Bindings: Env }>();
 
@@ -549,6 +550,12 @@ function formatIssueBody(
   if (screenshotDataUrl) {
     sections.push('## Screenshot');
     sections.push(`![Screenshot](${screenshotDataUrl})`);
+    if (payload.metadata.elementSelector) {
+      sections.push('');
+      sections.push(
+        `_Selected element is indicated by the rounded highlight box (${getSelectedElementHighlightColor(payload)})._`
+      );
+    }
     sections.push('');
   }
 
@@ -612,6 +619,12 @@ function formatIssueBody(
   sections.push('*Submitted via [BugDrop](https://github.com/mean-weasel/bugdrop)*');
 
   return sections.join('\n');
+}
+
+function getSelectedElementHighlightColor(payload: FeedbackPayload): string {
+  const color = payload.metadata.selectedElementHighlightColor;
+  if (!color || hasControlChars(color)) return resolveAccentColor();
+  return safeInlineCode(color.trim()) || resolveAccentColor();
 }
 
 export default api;

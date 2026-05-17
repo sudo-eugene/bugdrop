@@ -9,11 +9,11 @@ These attributes control the fundamental behavior of the widget.
 | Attribute | Default | Description |
 |-----------|---------|-------------|
 | `data-repo` | **(required)** | GitHub repository in `owner/repo` format |
-| `data-theme` | `"light"` | Widget theme: `"light"` or `"dark"` |
+| `data-theme` | `"auto"` | Widget theme: `"light"`, `"dark"`, or `"auto"` |
 | `data-position` | `"bottom-right"` | Button position: `"bottom-right"` or `"bottom-left"` |
-| `data-color` | `"#7c3aed"` | Primary accent color (any CSS color value) |
+| `data-color` | `"#14b8a6"` | Primary accent color (any CSS color value) |
 | `data-icon` | *(default bug icon)* | Custom icon: URL to an image, `"none"` to hide, or omit for default |
-| `data-label` | `""` | Text label displayed next to the button icon |
+| `data-label` | `"Feedback"` | Text label displayed next to the button icon |
 | `data-category-labels` | built-in labels | Self-hosted JSON mapping from built-in categories to GitHub labels |
 | `data-button` | `"true"` | Show the floating button: `"true"` or `"false"` |
 | `data-welcome` | `"Report a bug or request a feature"` | Welcome message displayed at the top of the form |
@@ -36,11 +36,16 @@ These attributes control the fundamental behavior of the widget.
 
 The `data-theme` attribute controls the overall color scheme of the widget:
 
-- **`light`** (default) -- White background with dark text. Suitable for most sites.
+- **`auto`** (default) -- Follows the user's system color scheme.
+- **`light`** -- White background with dark text. Suitable for most sites.
 - **`dark`** -- Dark background with light text. Ideal for sites with dark color schemes.
 
 ```html
-<!-- Light theme (default) -->
+<!-- Auto theme (default) -->
+<script src="https://bugdrop.neonwatty.workers.dev/widget.js"
+  data-repo="owner/repo" data-theme="auto"></script>
+
+<!-- Light theme -->
 <script src="https://bugdrop.neonwatty.workers.dev/widget.js"
   data-repo="owner/repo" data-theme="light"></script>
 
@@ -231,6 +236,7 @@ Control how screenshots are collected during the feedback flow.
 |-----------|---------|-------------|
 | `data-screenshot` | `"optional"` | Screenshot mode: `"optional"`, `"auto"`, or `"required"` |
 | `data-screenshot-scale` | `"2"` | Minimum pixel ratio for screenshot captures |
+| `data-element-context-max-area` | `"0"` | Maximum surrounding container size for Select Element captures, expressed as a multiple of the visible viewport area |
 
 ### Screenshot Modes
 
@@ -239,6 +245,33 @@ Control how screenshots are collected during the feedback flow.
 - **`required`** -- Requires a screenshot before submission. Users can choose full page, element, or area, then annotate or redact before submitting.
 
 Manual redaction is controlled by the person submitting feedback. Use developer-configured masking for fields that should be visually covered in supported screenshot modes, especially with automatic screenshots. Auto mode warns users that a full-page screenshot will be attached, but it does not show the manual picker or annotation review step.
+
+### Select Element screenshots
+
+When a user chooses **Select Element**, BugDrop captures the selected element and draws a rounded highlight box around it. This keeps the default behavior tight and predictable.
+
+The highlight uses the same styling controls as the widget:
+
+- `data-color` controls the highlight color.
+- `data-radius` controls the rounded corners.
+- `data-border-width` controls the highlight border thickness.
+
+GitHub issues include a screenshot caption that identifies the selected element highlight and includes the exact resolved highlight color.
+
+The amount of surrounding context is controlled by one attribute:
+
+```html
+<script
+  src="https://bugdrop.neonwatty.workers.dev/widget.js"
+  data-repo="owner/repo"
+  data-element-context-max-area="1.5"
+></script>
+```
+
+- Omit `data-element-context-max-area`, or set it to `"0"`, to capture only the selected element.
+- Increase `data-element-context-max-area` to allow larger surrounding containers. This can provide more context for triage and AI-assisted review, but may create larger images and slower captures.
+
+Select Element captures are capped at 1x pixel ratio even when `data-screenshot-scale` is higher. This keeps context screenshots small enough for practical issue uploads.
 
 ### Developer-configured screenshot masking
 

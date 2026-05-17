@@ -40,6 +40,7 @@ export interface FeedbackPayload {
     timestamp: string;
     elementSelector?: string;
     fullElementSelector?: string;
+    selectedElementHighlightColor?: string;
     // Parsed system info
     browser?: { name: string; version: string };
     os?: { name: string; version: string };

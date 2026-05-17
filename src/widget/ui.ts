@@ -5,6 +5,7 @@ import {
   sanitizeNonNegativePixelValue,
   sanitizeUrl,
 } from './sanitize';
+import { DEFAULT_ACCENT_COLOR, getAccentHoverColor } from '../defaults';
 
 declare const __BUGDROP_VERSION__: string;
 
@@ -97,9 +98,9 @@ export function injectStyles(shadow: ShadowRoot, config: WidgetConfig) {
       --bd-text-secondary: #57534e;
       --bd-text-muted: #a8a29e;
       --bd-border: #e7e5e4;
-      --bd-border-focus: #14b8a6;
-      --bd-primary: #14b8a6;
-      --bd-primary-hover: #0d9488;
+      --bd-border-focus: ${DEFAULT_ACCENT_COLOR};
+      --bd-primary: ${DEFAULT_ACCENT_COLOR};
+      --bd-primary-hover: ${getAccentHoverColor(DEFAULT_ACCENT_COLOR)};
       --bd-primary-text: #ffffff;
       --bd-overlay-bg: rgba(0, 0, 0, 0.4);
       --bd-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);

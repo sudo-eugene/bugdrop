@@ -8,12 +8,18 @@ import {
 import { createElementPicker } from './picker';
 import { beginViewportCapture, getRedactionCount, isFullPageDisabled } from './screenshot';
 import { showScreenshotOptions, type ScreenshotChoice } from './screenshot-options';
+import {
+  DEFAULT_SELECTED_ELEMENT_CONTEXT_MIN_PADDING_PX,
+  DEFAULT_SELECTED_ELEMENT_SCREENSHOT_PIXEL_RATIO,
+  resolveSelectedElementContextMaxArea,
+} from '../defaults';
 
 const MAX_FULL_SELECTOR_CLASSES = 3;
 
 export interface CaptureFlowConfig {
   screenshotMode: 'optional' | 'auto' | 'required';
   screenshotScale?: number;
+  elementContextMaxArea?: number;
   accentColor?: string;
   font?: string;
   radius?: string;
@@ -94,6 +100,7 @@ export async function runScreenshotCaptureFlow(
       result.redactionCount,
       {
         redactionUnavailable: result.redactionUnavailable,
+        ...(result.elementSelector ? { selectedElementCapture: true } : {}),
       }
     );
 
@@ -245,8 +252,20 @@ async function captureFromElementChoice(
 
   const elementSelector = getElementSelector(element);
   const fullElementSelector = getFullElementSelector(element);
-  const result = await captureWithLoading(root, element, config.screenshotScale, {
+  const captureTarget = getElementContextCaptureTarget(element, {
+    maxViewportAreaMultiplier: config.elementContextMaxArea,
+  });
+  const result = await captureWithLoading(root, captureTarget, config.screenshotScale, {
     allowSkip: !screenshotRequired,
+    captureOptions: {
+      highlightElement: element,
+      highlightStyle: {
+        accentColor: config.accentColor,
+        radius: config.radius,
+        borderWidth: config.borderWidth,
+      },
+      pixelRatio: DEFAULT_SELECTED_ELEMENT_SCREENSHOT_PIXEL_RATIO,
+    },
   });
   if (result.kind === 'cancelled') return { kind: 'returnToForm' };
   if (result.kind === 'skipped') {
@@ -262,7 +281,7 @@ async function captureFromElementChoice(
     screenshot: result.dataUrl,
     elementSelector,
     fullElementSelector,
-    redactionCount: getRedactionCount(element),
+    redactionCount: getRedactionCount(captureTarget),
     redactionUnavailable: false,
   };
 }
@@ -376,6 +395,50 @@ function getFullElementSelector(element: Element): string {
   }
 
   return path.join(' > ');
+}
+
+interface ElementContextOptions {
+  maxViewportAreaMultiplier?: number;
+}
+
+function getElementContextCaptureTarget(element: Element, options: ElementContextOptions): Element {
+  const selectedRect = element.getBoundingClientRect();
+  if (!isUsableRect(selectedRect)) return element;
+
+  const viewportArea = Math.max(1, window.innerWidth * window.innerHeight);
+  const maxContextArea =
+    viewportArea * resolveSelectedElementContextMaxArea(options.maxViewportAreaMultiplier);
+
+  let best: Element = element;
+  let current = element.parentElement;
+
+  while (current && current !== document.body && current !== document.documentElement) {
+    const rect = current.getBoundingClientRect();
+    const area = rect.width * rect.height;
+
+    if (isUsableRect(rect) && area <= maxContextArea && hasUsefulContext(rect, selectedRect)) {
+      best = current;
+    }
+
+    current = current.parentElement;
+  }
+
+  return best;
+}
+
+function isUsableRect(rect: DOMRect): boolean {
+  return rect.width > 0 && rect.height > 0;
+}
+
+function hasUsefulContext(candidate: DOMRect, selected: DOMRect): boolean {
+  const horizontalContext =
+    candidate.width >= selected.width + DEFAULT_SELECTED_ELEMENT_CONTEXT_MIN_PADDING_PX * 2;
+  const verticalContext =
+    candidate.height >= selected.height + DEFAULT_SELECTED_ELEMENT_CONTEXT_MIN_PADDING_PX * 2;
+  const selectedArea = selected.width * selected.height;
+  const candidateArea = candidate.width * candidate.height;
+
+  return horizontalContext || verticalContext || candidateArea >= selectedArea * 4;
 }
 
 function getFullSelectorSegment(element: Element): string {

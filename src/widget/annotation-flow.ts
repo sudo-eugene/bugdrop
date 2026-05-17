@@ -5,7 +5,7 @@ export function showAnnotationStep(
   root: HTMLElement,
   screenshot: string,
   redactionCount = 0,
-  opts?: { redactionUnavailable?: boolean }
+  opts?: { redactionUnavailable?: boolean; selectedElementCapture?: boolean }
 ): Promise<string | 'retake' | 'cancel'> {
   return new Promise(resolve => {
     let redactionNote = '';
@@ -18,6 +18,13 @@ export function showAnnotationStep(
         `${redactionCount} private ${redactionCount === 1 ? 'item was' : 'items were'} marked for redaction in this screenshot. Review before sending.`
       );
     }
+    const selectedElementNote = opts?.selectedElementCapture
+      ? `
+        <p class="bd-selected-element-note" style="margin: -4px 0 12px; color: var(--bd-text-secondary); font-size: 13px;">
+          Need more surrounding context? Adjust <a href="https://bugdrop.dev/docs/configuration#select-element-screenshots" target="_blank" rel="noopener noreferrer">data-element-context-max-area</a> on the BugDrop script tag.
+        </p>
+      `
+      : '';
     const modal = createModal(
       root,
       'Review Screenshot',
@@ -26,6 +33,7 @@ export function showAnnotationStep(
         <p style="margin: 0 0 12px; color: var(--bd-text-secondary); font-size: 13px;">
           Check that no sensitive information is visible before sending. Cover sensitive areas before submitting. Redactions are baked into the uploaded image.
         </p>
+        ${selectedElementNote}
         <div class="bd-tools">
           <button class="bd-tool active" data-tool="draw">✏️ Draw</button>
           <button class="bd-tool" data-tool="arrow">➡️ Arrow</button>
