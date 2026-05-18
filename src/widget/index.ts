@@ -19,6 +19,7 @@ import {
   sanitizeShadowPreset,
   sanitizeUrl,
 } from './sanitize';
+import { resolveAccentColor } from '../defaults';
 
 type FeedbackCategory = 'bug' | 'feature' | 'question';
 type CategoryLabelConfig = Partial<Record<FeedbackCategory, string | string[]>>;
@@ -61,6 +62,7 @@ interface WidgetConfig {
   // Screenshot configuration
   screenshotMode: 'optional' | 'auto' | 'required';
   screenshotScale?: number; // Minimum pixel ratio for captures (default: 2)
+  elementContextMaxArea?: number; // Max ancestor capture area as a viewport multiplier
   issueLinkVisibility: IssueLinkVisibility;
 }
 
@@ -88,6 +90,8 @@ interface FeedbackData {
   category: FeedbackCategory;
   screenshot: string | null;
   elementSelector: string | null;
+  fullElementSelector: string | null;
+  selectedElementHighlightColor: string | null;
   name?: string;
   email?: string;
 }
@@ -353,6 +357,11 @@ const screenshotScale = sanitizeNonNegativeNumber(rawScreenshotScale);
 if (rawScreenshotScale && screenshotScale === undefined) {
   console.warn('[BugDrop] Invalid data-screenshot-scale. Expected a non-negative number.');
 }
+const rawElementContextMaxArea = script?.dataset.elementContextMaxArea;
+const elementContextMaxArea = sanitizeNonNegativeNumber(rawElementContextMaxArea);
+if (rawElementContextMaxArea && elementContextMaxArea === undefined) {
+  console.warn('[BugDrop] Invalid data-element-context-max-area. Expected a non-negative number.');
+}
 const rawShadow = script?.dataset.shadow;
 const shadow = sanitizeShadowPreset(rawShadow);
 if (rawShadow && !shadow) {
@@ -418,6 +427,7 @@ const config: WidgetConfig = {
     return 'optional' as const;
   })(),
   screenshotScale,
+  elementContextMaxArea,
   issueLinkVisibility,
 };
 
@@ -821,6 +831,10 @@ async function openFeedbackFlow(
       email: formResult.email,
       screenshot: screenshotResult.screenshot,
       elementSelector: screenshotResult.elementSelector,
+      fullElementSelector: screenshotResult.fullElementSelector,
+      selectedElementHighlightColor: screenshotResult.elementSelector
+        ? resolveAccentColor(config.accentColor)
+        : null,
     });
     break;
   }
@@ -1157,6 +1171,8 @@ async function submitFeedback(root: HTMLElement, config: WidgetConfig, data: Fee
           },
           timestamp: new Date().toISOString(),
           elementSelector: data.elementSelector,
+          fullElementSelector: data.fullElementSelector,
+          selectedElementHighlightColor: data.selectedElementHighlightColor || undefined,
           domNodeCount,
           fullPageDisabled: isFullPageDisabled(),
           // Parsed system info

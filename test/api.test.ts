@@ -1067,6 +1067,40 @@ describe('API Routes', () => {
       );
     });
 
+    it('should add a selected-element screenshot caption when an element was chosen', async () => {
+      mockGetInstallationToken.mockResolvedValue('test-token');
+      const uploadedUrl =
+        'https://raw.githubusercontent.com/testowner/testrepo/main/.feedback/screenshots/selected.png';
+      mockUploadScreenshotAsAsset.mockResolvedValue(uploadedUrl);
+      mockCreateIssue.mockResolvedValue({
+        number: 42,
+        html_url: 'https://github.com/testowner/testrepo/issues/42',
+      });
+
+      const payloadWithSelectedElement = {
+        ...validPayload,
+        screenshot: validPngDataUrl,
+        metadata: {
+          ...validPayload.metadata,
+          elementSelector: '#book-now',
+          selectedElementHighlightColor: '#2563eb',
+        },
+      };
+
+      const req = new Request('http://localhost/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadWithSelectedElement),
+      });
+      await app.fetch(req, mockEnv);
+
+      const issueBody = mockCreateIssue.mock.calls[0][4];
+      expect(issueBody).toContain(`![Screenshot](${uploadedUrl})`);
+      expect(issueBody).toContain(
+        '_Selected element is indicated by the rounded highlight box (#2563eb)._'
+      );
+    });
+
     it('should use screenshot when provided (annotations handled client-side)', async () => {
       mockGetInstallationToken.mockResolvedValue('test-token');
       const uploadedUrl =
@@ -1217,6 +1251,7 @@ describe('API Routes', () => {
         metadata: {
           ...validPayload.metadata,
           elementSelector: '#submit-button',
+          fullElementSelector: 'html > body > main > form#contact > button#submit-button',
         },
       };
 
@@ -1234,6 +1269,8 @@ describe('API Routes', () => {
       expect(issueBody).toContain('http://localhost:3000');
       expect(issueBody).toContain('1920×1080');
       expect(issueBody).toContain('#submit-button');
+      expect(issueBody).toContain('Full CSS path');
+      expect(issueBody).toContain('html > body > main > form#contact > button#submit-button');
       expect(issueBody).toContain('Submitted via');
     });
 

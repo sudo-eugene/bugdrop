@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolvePickerStyle } from '../src/widget/picker';
+import { DEFAULT_ACCENT_COLOR } from '../src/defaults';
 
 describe('resolvePickerStyle', () => {
   it('passes through valid style values', () => {
@@ -36,7 +37,7 @@ describe('resolvePickerStyle', () => {
         borderColor: '#000; color: red',
       })
     ).toEqual({
-      accent: '#14b8a6',
+      accent: DEFAULT_ACCENT_COLOR,
       fontFamily: "'Space Grotesk', system-ui, sans-serif",
       radius: '6px',
       bw: '3',

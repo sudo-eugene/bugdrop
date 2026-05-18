@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { EmptyCaptureReason } from '../src/widget/capture-flow';
 import type { ScreenshotChoice } from '../src/widget/screenshot-options';
 import type { CaptureWithLoadingResult } from '../src/widget/capture-loading';
+import {
+  DEFAULT_SELECTED_ELEMENT_CONTEXT_MAX_VIEWPORT_AREA_MULTIPLIER,
+  DEFAULT_SELECTED_ELEMENT_SCREENSHOT_PIXEL_RATIO,
+} from '../src/defaults';
 
 const baseConfig = {
   screenshotMode: 'optional' as const,
@@ -16,6 +20,12 @@ async function loadCaptureFlowWithMocks(opts: {
   annotationResult?: string | 'retake' | 'cancel';
 }) {
   vi.resetModules();
+  const captureWithLoadingMock = vi
+    .fn()
+    .mockResolvedValue(opts.captureResult ?? { kind: 'skipped' });
+  const captureAreaWithLoadingMock = vi
+    .fn()
+    .mockResolvedValue(opts.captureResult ?? { kind: 'skipped' });
   vi.doMock('../src/widget/screenshot-options', () => ({
     showScreenshotOptions: vi.fn().mockResolvedValue(opts.screenshotChoice),
   }));
@@ -26,8 +36,8 @@ async function loadCaptureFlowWithMocks(opts: {
     createAreaPicker: vi.fn(),
   }));
   vi.doMock('../src/widget/capture-loading', () => ({
-    captureWithLoading: vi.fn().mockResolvedValue(opts.captureResult ?? { kind: 'skipped' }),
-    captureAreaWithLoading: vi.fn(),
+    captureWithLoading: captureWithLoadingMock,
+    captureAreaWithLoading: captureAreaWithLoadingMock,
     capturePromiseWithLoading: vi.fn().mockResolvedValue(opts.captureResult ?? { kind: 'skipped' }),
   }));
   vi.doMock('../src/widget/annotation-flow', () => ({
@@ -39,10 +49,15 @@ async function loadCaptureFlowWithMocks(opts: {
     isFullPageDisabled: vi.fn().mockReturnValue(false),
   }));
 
-  return import('../src/widget/capture-flow');
+  return {
+    ...(await import('../src/widget/capture-flow')),
+    captureWithLoadingMock,
+    captureAreaWithLoadingMock,
+  };
 }
 
 afterEach(() => {
+  document.body.innerHTML = '';
   vi.doUnmock('../src/widget/screenshot-options');
   vi.doUnmock('../src/widget/picker');
   vi.doUnmock('../src/widget/area-picker');
@@ -79,7 +94,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: false });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: false,
+    });
     expect(onComplexScreenshotSkipped).toHaveBeenCalledTimes(1);
   });
 
@@ -97,14 +117,37 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: false });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: false,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 
   it('keeps selected element metadata when element capture is skipped after failure', async () => {
-    const element = document.createElement('button');
-    element.id = 'target-button';
-    document.body.appendChild(element);
+    document.body.innerHTML = `
+      <div class="injected-before-page"></div>
+      <div class="another-injected-wrapper"></div>
+      <div id="page" class="site">
+        <div id="content" class="site-content">
+          <div id="primary" class="content-area">
+            <main id="main" class="site-main">
+              <article id="post-27" class="post-27 page">
+                <div class="inside-article">
+                  <div class="entry-content">
+                    <div class="gb-container gb-container-f0cc8c05"></div>
+                    <div class="gb-container gb-container-928af62b"></div>
+                  </div>
+                </div>
+              </article>
+            </main>
+          </div>
+        </div>
+      </div>
+    `;
+    const element = document.querySelector('.gb-container-928af62b')!;
     const { runScreenshotCaptureFlow } = await loadCaptureFlowWithMocks({
       screenshotChoice: { kind: 'element' },
       pickedElement: element,
@@ -121,10 +164,283 @@ describe('capture flow state decisions', () => {
 
     expect(result).toEqual({
       screenshot: null,
-      elementSelector: '#target-button',
+      elementSelector:
+        '#post-27 > div.inside-article > div.entry-content > div.gb-container.gb-container-928af62b',
+      fullElementSelector:
+        'html > body > div#page.site > div#content.site-content > div#primary.content-area > main#main.site-main > article#post-27.post-27.page > div.inside-article > div.entry-content > div.gb-container.gb-container-928af62b:nth-of-type(2)',
       returnToForm: false,
     });
+    expect(document.querySelector(result.fullElementSelector!)).toBe(element);
     expect(onComplexScreenshotSkipped).toHaveBeenCalledTimes(1);
+  });
+
+  it('captures a surrounding container and highlights the selected element', async () => {
+    Object.defineProperty(window, 'innerWidth', { value: 1200, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+
+    const outerContext = document.createElement('article');
+    outerContext.className = 'listing-card';
+    outerContext.getBoundingClientRect = () =>
+      ({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 900,
+        bottom: 900,
+        width: 900,
+        height: 900,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+
+    const context = document.createElement('section');
+    context.className = 'field-group';
+    context.getBoundingClientRect = () =>
+      ({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 500,
+        bottom: 300,
+        width: 500,
+        height: 300,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+
+    const target = document.createElement('button');
+    target.id = 'book-now';
+    target.getBoundingClientRect = () =>
+      ({
+        x: 100,
+        y: 100,
+        top: 100,
+        left: 100,
+        right: 180,
+        bottom: 140,
+        width: 80,
+        height: 40,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+    context.appendChild(target);
+    outerContext.appendChild(context);
+    document.body.appendChild(outerContext);
+
+    const { runScreenshotCaptureFlow, captureWithLoadingMock } = await loadCaptureFlowWithMocks({
+      screenshotChoice: { kind: 'element' },
+      pickedElement: target,
+      captureResult: { kind: 'skipped' },
+    });
+    const root = document.createElement('div');
+
+    await runScreenshotCaptureFlow(
+      root,
+      {
+        ...baseConfig,
+        elementContextMaxArea: 1.5,
+      },
+      true,
+      vi.fn()
+    );
+
+    expect(captureWithLoadingMock).toHaveBeenCalledWith(root, outerContext, undefined, {
+      allowSkip: true,
+      captureOptions: {
+        highlightElement: target,
+        highlightStyle: {
+          accentColor: undefined,
+          borderWidth: undefined,
+          radius: undefined,
+        },
+        pixelRatio: DEFAULT_SELECTED_ELEMENT_SCREENSHOT_PIXEL_RATIO,
+      },
+    });
+  });
+
+  it('uses the default selected element context settings when no overrides are provided', async () => {
+    expect(DEFAULT_SELECTED_ELEMENT_CONTEXT_MAX_VIEWPORT_AREA_MULTIPLIER).toBe(0);
+  });
+
+  it('limits selected element context by configured viewport area multiplier', async () => {
+    Object.defineProperty(window, 'innerWidth', { value: 1200, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+
+    const outerContext = document.createElement('article');
+    outerContext.className = 'listing-card';
+    outerContext.getBoundingClientRect = () =>
+      ({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 900,
+        bottom: 900,
+        width: 900,
+        height: 900,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+
+    const context = document.createElement('section');
+    context.className = 'field-group';
+    context.getBoundingClientRect = () =>
+      ({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 500,
+        bottom: 300,
+        width: 500,
+        height: 300,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+
+    const target = document.createElement('button');
+    target.id = 'book-now';
+    target.getBoundingClientRect = () =>
+      ({
+        x: 100,
+        y: 100,
+        top: 100,
+        left: 100,
+        right: 180,
+        bottom: 140,
+        width: 80,
+        height: 40,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+    context.appendChild(target);
+    outerContext.appendChild(context);
+    document.body.appendChild(outerContext);
+
+    const { runScreenshotCaptureFlow, captureWithLoadingMock } = await loadCaptureFlowWithMocks({
+      screenshotChoice: { kind: 'element' },
+      pickedElement: target,
+      captureResult: { kind: 'skipped' },
+    });
+    const root = document.createElement('div');
+
+    await runScreenshotCaptureFlow(
+      root,
+      {
+        ...baseConfig,
+        elementContextMaxArea: 0.2,
+      },
+      true,
+      vi.fn()
+    );
+
+    expect(captureWithLoadingMock.mock.calls[0]?.[1]).toBe(context);
+  });
+
+  it('keeps selected element captures tight by default', async () => {
+    Object.defineProperty(window, 'innerWidth', { value: 1200, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+
+    const context = document.createElement('section');
+    context.className = 'field-group';
+    context.getBoundingClientRect = () =>
+      ({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 500,
+        bottom: 300,
+        width: 500,
+        height: 300,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+
+    const target = document.createElement('button');
+    target.id = 'book-now';
+    target.getBoundingClientRect = () =>
+      ({
+        x: 100,
+        y: 100,
+        top: 100,
+        left: 100,
+        right: 180,
+        bottom: 140,
+        width: 80,
+        height: 40,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+    context.appendChild(target);
+    document.body.appendChild(context);
+
+    const { runScreenshotCaptureFlow, captureWithLoadingMock } = await loadCaptureFlowWithMocks({
+      screenshotChoice: { kind: 'element' },
+      pickedElement: target,
+      captureResult: { kind: 'skipped' },
+    });
+    const root = document.createElement('div');
+
+    await runScreenshotCaptureFlow(root, baseConfig, true, vi.fn());
+
+    expect(captureWithLoadingMock.mock.calls[0]?.[1]).toBe(target);
+  });
+
+  it('passes the selected element when no larger fallback container is useful', async () => {
+    Object.defineProperty(window, 'innerWidth', { value: 1200, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+
+    const target = document.createElement('button');
+    target.id = 'book-now';
+    target.getBoundingClientRect = () =>
+      ({
+        x: 100,
+        y: 100,
+        top: 100,
+        left: 100,
+        right: 180,
+        bottom: 140,
+        width: 80,
+        height: 40,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+
+    document.body.appendChild(target);
+
+    const { runScreenshotCaptureFlow, captureWithLoadingMock } = await loadCaptureFlowWithMocks({
+      screenshotChoice: { kind: 'element' },
+      pickedElement: target,
+      captureResult: { kind: 'skipped' },
+    });
+    const root = document.createElement('div');
+
+    await runScreenshotCaptureFlow(root, baseConfig, true, vi.fn());
+
+    expect(captureWithLoadingMock).toHaveBeenCalledWith(root, target, undefined, {
+      allowSkip: true,
+      captureOptions: {
+        highlightElement: target,
+        highlightStyle: {
+          accentColor: undefined,
+          borderWidth: undefined,
+          radius: undefined,
+        },
+        pixelRatio: DEFAULT_SELECTED_ELEMENT_SCREENSHOT_PIXEL_RATIO,
+      },
+    });
   });
 
   it('returns to form when the user dismisses the screenshot options modal', async () => {
@@ -140,7 +456,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: true });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: true,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 
@@ -158,7 +479,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: true });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: true,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 
@@ -177,7 +503,12 @@ describe('capture flow state decisions', () => {
       onComplexScreenshotSkipped
     );
 
-    expect(result).toEqual({ screenshot: null, elementSelector: null, returnToForm: true });
+    expect(result).toEqual({
+      screenshot: null,
+      elementSelector: null,
+      fullElementSelector: null,
+      returnToForm: true,
+    });
     expect(onComplexScreenshotSkipped).not.toHaveBeenCalled();
   });
 
